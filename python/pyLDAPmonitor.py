@@ -174,7 +174,8 @@ def get_machine_name(args, domain):
 
 
 def init_ldap_connection(target, tls_version, args, domain, username, password, lmhash, nthash):
-    user = '%s\\%s' % (domain, username)
+    # user = '%s\\%s' % (domain, username)
+    user = username
     if tls_version is not None:
         use_ssl = True
         port = 636
@@ -194,7 +195,7 @@ def init_ldap_connection(target, tls_version, args, domain, username, password, 
             lmhash = "aad3b435b51404eeaad3b435b51404ee"
         ldap_session = ldap3.Connection(ldap_server, user=user, password=lmhash + ":" + nthash, authentication=ldap3.NTLM, auto_bind=True)
     else:
-        ldap_session = ldap3.Connection(ldap_server, user=user, password=password, authentication=ldap3.NTLM, auto_bind=True)
+        ldap_session = ldap3.Connection(ldap_server, user=user, password=password, authentication=ldap3.SIMPLE, auto_bind=True)
 
     return ldap_server, ldap_session
 
