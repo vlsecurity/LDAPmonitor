@@ -86,8 +86,8 @@ class Logger(object):
             "dn": dn,
             "message": message,
             "attribute_path": attribute_path,
-            "value_before": value_before,
-            "value_after": value_after
+            "value_before": str(value_before),
+            "value_after": str(value_after)
         }
         log_string = jsonpickle.encode(log_data)
 
