@@ -19,6 +19,7 @@ import time
 import datetime
 import re
 from binascii import unhexlify
+import jsonpickle
 
 
 ### Data utils
@@ -44,11 +45,12 @@ def dict_path_access(d, path):
 ### Logger
 
 class Logger(object):
-    def __init__(self, debug=False, logfile=None, nocolors=False):
+    def __init__(self, debug=False, logfile=None, jsonfile=None, nocolors=False):
         super(Logger, self).__init__()
         self.__debug = debug
         self.__nocolors = nocolors
         self.logfile = logfile
+        self.jsonfile = jsonfile
         #
         if self.logfile is not None:
             if os.path.exists(self.logfile):
@@ -57,6 +59,14 @@ class Logger(object):
                     k += 1
                 self.logfile = self.logfile + (".%d" % k)
             open(self.logfile, "w").close()
+        #
+        if self.jsonfile is not None:
+            if os.path.exists(self.jsonfile):
+                k = 1
+                while os.path.exists(self.jsonfile+(".%d"%k)):
+                    k += 1
+                self.jsonfile = self.jsonfile + (".%d" % k)
+            open(self.jsonfile, "w").close()
 
     def print(self, message=""):
         nocolor_message = re.sub("\x1b[\[]([0-9;]+)m", "", message)
@@ -68,6 +78,25 @@ class Logger(object):
             f = open(self.logfile, "a")
             f.write(nocolor_message + "\n")
             f.close()
+
+    def json_log(self, timestamp, dn, level='default', message=None, attribute_path=None, value_before=None, value_after=None):
+        log_data = {
+            "timestamp": timestamp,
+            "level": level,
+            "dn": dn,
+            "message": message,
+            "attribute_path": attribute_path,
+            "value_before": value_before,
+            "value_after": value_after
+        }
+        log_string = jsonpickle.encode(log_data)
+
+        if self.jsonfile is not None:
+            f = open(self.jsonfile, "a")
+            f.write(log_string + "\n")
+            f.close()
+
+
 
     def info(self, message):
         nocolor_message = re.sub("\x1b[\[]([0-9;]+)m", "", message)
@@ -388,9 +417,13 @@ def diff(last1_query_results, last2_query_results, logger, ignore_user_logon=Fal
             common_keys.append(key)
         else:
             logger.print("%s \x1b[91m'%s' was deleted.\x1b[0m" % (dateprompt, key))
+            message = "'%s' was deleted." % (key)
+            logger.json_log(timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), dn=key, message=message)
     for key in last1_query_results.keys():
         if key not in last2_query_results.keys() and key not in ignored_keys:
             logger.print("%s \x1b[92m'%s' was added.\x1b[0m" % (dateprompt, key))
+            message = "'%s' was added." % (key)
+            logger.json_log(timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), dn=key, message=message)
     #
     for _dn in common_keys:
         paths_l2 = dict_get_paths(last2_query_results[_dn])
@@ -410,8 +443,10 @@ def diff(last1_query_results, last2_query_results, logger, ignore_user_logon=Fal
             for _ad in attrs_diff:
                 path, value_after, value_before = _ad
                 attribute_path = "─>".join(["\"\x1b[93m%s\x1b[0m\"" % attr for attr in path])
+                attribute_path_raw = "─>".join(["%s" % attr for attr in path])
                 if any([ik in path for ik in ignored_keys]):
                     continue
+
                 if type(value_before) == list:
                     value_before = [
                         v.strftime("%Y-%m-%d %H:%M:%S")
@@ -426,12 +461,23 @@ def diff(last1_query_results, last2_query_results, logger, ignore_user_logon=Fal
                         else v
                         for v in value_after
                     ]
+
                 if value_after is not None and value_before is not None:
                     logger.print(" | Attribute %s changed from '\x1b[96m%s\x1b[0m' to '\x1b[96m%s\x1b[0m'" % (attribute_path, value_before, value_after))
+                    #json_log(self, timestamp, dn, level='default', message=None, attribute_path=None, value_before=None, value_after=None)
+                    message = "Attribute %s changed from '%s' to '%s'" % (attribute_path_raw, value_before, value_after)
+                    logger.json_log(timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), dn=_dn, level='default', message=message, attribute_path=attribute_path_raw,
+                                value_before=value_before, value_after=value_after)
                 elif value_after is None and value_before is not None:
                     logger.print(" | Attribute %s = '\x1b[96m%s\x1b[0m' was deleted." % (attribute_path, value_before))
+                    message = "Attribute %s = '%s' was deleted." % (attribute_path_raw, value_before)
+                    logger.json_log(timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), dn=_dn, level='default', message=message, attribute_path=attribute_path_raw,
+                                value_before=value_before)
                 elif value_after is not None and value_before is None:
                     logger.print(" | Attribute %s = '\x1b[96m%s\x1b[0m' was created." % (attribute_path, value_after))
+                    message = "Attribute %s = '%s' was created." % (attribute_path_raw, value_after)
+                    logger.json_log(timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), dn=_dn, level='default', message=message, attribute_path=attribute_path_raw,
+                                value_after=value_after)
 
 
 def parse_args():
@@ -440,6 +486,7 @@ def parse_args():
     parser.add_argument("--debug", dest="debug", action="store_true", default=False, help="Debug mode.")
     parser.add_argument("--no-colors", dest="no_colors", action="store_true", default=False, help="No colors mode.")
     parser.add_argument("-l", "--logfile", dest="logfile", type=str, default=None, help="Log file to save output to.")
+    parser.add_argument("-j", "--jsonfile", dest="jsonfile", type=str, default=None, help="JSON Log file to save output to.")
     parser.add_argument("-s", "--page-size", dest="page_size", type=int, default=1000, help="Page size.")
     parser.add_argument("-S", "--search-base", dest="search_base", type=str, default=None, help="Search base.")
     parser.add_argument("-r", "--randomize-delay", dest="randomize_delay", action="store_true", default=False, help="Randomize delay between two queries, between 1 and 5 seconds.")
@@ -486,7 +533,7 @@ def query_all_naming_contexts(ldap_server, ldap_session, logger, page_size, sear
 
 if __name__ == '__main__':
     args = parse_args()
-    logger = Logger(debug=args.debug, nocolors=args.no_colors, logfile=args.logfile)
+    logger = Logger(debug=args.debug, nocolors=args.no_colors, logfile=args.logfile, jsonfile=args.jsonfile)
     logger.print("[+]======================================================")
     logger.print("[+]    LDAP live monitor v1.3        @podalirius_        ")
     logger.print("[+]======================================================")
