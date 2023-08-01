@@ -2,3 +2,4 @@ python-ldap
 ldap3
 impacket
 jsonpickle
+deepdiff

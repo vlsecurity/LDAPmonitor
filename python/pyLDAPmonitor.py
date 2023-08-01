@@ -20,6 +20,7 @@ import datetime
 import re
 from binascii import unhexlify
 import jsonpickle
+import deepdiff
 
 
 ### Data utils
@@ -79,7 +80,7 @@ class Logger(object):
             f.write(nocolor_message + "\n")
             f.close()
 
-    def json_log(self, timestamp, dn, level='default', message=None, attribute_path=None, value_before=None, value_after=None):
+    def json_log(self, timestamp, dn, level='default', message=None, attribute_path=None, value_before=None, value_after=None, diff=None):
         log_data = {
             "timestamp": timestamp,
             "level": level,
@@ -87,7 +88,8 @@ class Logger(object):
             "message": message,
             "attribute_path": attribute_path,
             "value_before": str(value_before),
-            "value_after": str(value_after)
+            "value_after": str(value_after),
+            "diff": str(diff)
         }
         log_string = jsonpickle.encode(log_data)
 
@@ -466,8 +468,9 @@ def diff(last1_query_results, last2_query_results, logger, ignore_user_logon=Fal
                     logger.print(" | Attribute %s changed from '\x1b[96m%s\x1b[0m' to '\x1b[96m%s\x1b[0m'" % (attribute_path, value_before, value_after))
                     #json_log(self, timestamp, dn, level='default', message=None, attribute_path=None, value_before=None, value_after=None)
                     message = "Attribute %s was changed." % (attribute_path_raw)
+                    diff = deepdiff.DeepDiff(value_before,value_after)
                     logger.json_log(timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), dn=_dn, level='default', message=message, attribute_path=attribute_path_raw,
-                                value_before=value_before, value_after=value_after)
+                                value_before=value_before, value_after=value_after, diff=diff)
                 elif value_after is None and value_before is not None:
                     logger.print(" | Attribute %s = '\x1b[96m%s\x1b[0m' was deleted." % (attribute_path, value_before))
                     message = "Attribute %s was deleted." % (attribute_path_raw)
